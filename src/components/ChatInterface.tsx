@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { ScrollArea } from './ui/scroll-area';
 import { Badge } from './ui/badge';
+import { AIService } from '../lib/blink';
 import { 
   Send, 
   Paperclip, 
@@ -39,7 +40,8 @@ export const ChatInterface: React.FC = () => {
     quickActions,
     addMessage,
     clearMessages,
-    setProcessing
+    setProcessing,
+    updateProgress
   } = useAppStore();
 
   const [input, setInput] = useState('');
@@ -68,9 +70,10 @@ export const ChatInterface: React.FC = () => {
   const handleSendMessage = async () => {
     if ((!input.trim() && attachedFiles.length === 0) || !currentProject || !currentProfile) return;
 
-    let messageContent = input.trim();
+    const originalInput = input.trim();
+    let messageContent = originalInput;
     
-    // Add file information to message content
+    // Add file information to message content for display
     if (attachedFiles.length > 0) {
       const fileList = attachedFiles.map(file => 
         `📎 ${file.name} (${formatFileSize(file.size)})`
@@ -92,22 +95,58 @@ export const ChatInterface: React.FC = () => {
     };
 
     addMessage(userMessage);
+    const currentFiles = [...attachedFiles]; // Store files before clearing
     setInput('');
     setAttachedFiles([]);
     setProcessing(true);
 
-    // Simulate AI response
-    setTimeout(() => {
+    try {
+      // Update progress tracking
+      updateProgress({
+        currentTask: `Processing: ${originalInput.substring(0, 50)}${originalInput.length > 50 ? '...' : ''}`,
+        progress: 25,
+        timeRemaining: 30,
+        completedSteps: ['Analyzing request', 'Processing attachments'],
+        remainingSteps: ['Generating response', 'Quality check', 'Finalizing output']
+      });
+
+      // Use AI service to process the request
+      const aiResponse = await AIService.processUserRequest(originalInput, currentFiles);
+      
+      // Update progress to completion
+      updateProgress({
+        currentTask: 'Task completed successfully',
+        progress: 100,
+        timeRemaining: 0,
+        completedSteps: ['Analyzing request', 'Processing attachments', 'Generating response', 'Quality check', 'Finalizing output'],
+        remainingSteps: []
+      });
+      
       const aiMessage: ChatMessage = {
         id: `msg_${Date.now() + 1}`,
-        content: `I understand you want to work on "${input.trim()}". As ${settings.assistantName}, I'm ready to help you with this ${currentProject.type} project. Let me analyze your request and provide a comprehensive solution.\n\nI'll coordinate the necessary AI models and tools to deliver exactly what you need. This may involve:\n\n• Content generation and optimization\n• Quality assurance and humanization\n• Cost-effective resource allocation\n• Integration with relevant software and services\n\nShall I proceed with the implementation?`,
+        content: aiResponse,
         role: 'assistant',
         timestamp: new Date(),
         projectId: currentProject.id
       };
+      
       addMessage(aiMessage);
+    } catch (error) {
+      console.error('Error processing AI request:', error);
+      
+      // Fallback response
+      const errorMessage: ChatMessage = {
+        id: `msg_${Date.now() + 1}`,
+        content: `I apologize, but I encountered an error processing your request. Please try again or contact support if the issue persists.\n\nError details: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        role: 'assistant',
+        timestamp: new Date(),
+        projectId: currentProject.id
+      };
+      
+      addMessage(errorMessage);
+    } finally {
       setProcessing(false);
-    }, 2000);
+    }
   };
 
   const handleQuickAction = (prompt: string) => {
