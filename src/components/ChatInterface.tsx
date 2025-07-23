@@ -44,8 +44,10 @@ export const ChatInterface: React.FC = () => {
 
   const [input, setInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,19 +57,43 @@ export const ChatInterface: React.FC = () => {
     scrollToBottom();
   }, [messages]);
 
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
+
   const handleSendMessage = async () => {
-    if (!input.trim() || !currentProject || !currentProfile) return;
+    if ((!input.trim() && attachedFiles.length === 0) || !currentProject || !currentProfile) return;
+
+    let messageContent = input.trim();
+    
+    // Add file information to message content
+    if (attachedFiles.length > 0) {
+      const fileList = attachedFiles.map(file => 
+        `📎 ${file.name} (${formatFileSize(file.size)})`
+      ).join('\n');
+      messageContent = messageContent ? `${messageContent}\n\n${fileList}` : fileList;
+    }
 
     const userMessage: ChatMessage = {
       id: `msg_${Date.now()}`,
-      content: input.trim(),
+      content: messageContent,
       role: 'user',
       timestamp: new Date(),
-      projectId: currentProject.id
+      projectId: currentProject.id,
+      attachments: attachedFiles.map(file => ({
+        name: file.name,
+        size: file.size,
+        type: file.type
+      }))
     };
 
     addMessage(userMessage);
     setInput('');
+    setAttachedFiles([]);
     setProcessing(true);
 
     // Simulate AI response
@@ -98,6 +124,19 @@ export const ChatInterface: React.FC = () => {
 
   const copyMessage = (content: string) => {
     navigator.clipboard.writeText(content);
+  };
+
+  const handleFileUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    setAttachedFiles(prev => [...prev, ...files]);
+  };
+
+  const removeFile = (index: number) => {
+    setAttachedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   if (!currentProfile) {
@@ -272,6 +311,43 @@ export const ChatInterface: React.FC = () => {
 
       {/* Input Area */}
       <div className="p-4 border-t border-white/10 glass-panel">
+        {/* File Attachments Display */}
+        {attachedFiles.length > 0 && (
+          <div className="mb-3 space-y-2">
+            <div className="text-sm text-gray-400">Attached files:</div>
+            <div className="flex flex-wrap gap-2">
+              {attachedFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className="flex items-center space-x-2 bg-white/5 rounded-lg px-3 py-2 text-sm"
+                >
+                  <Paperclip className="h-3 w-3 text-gray-400" />
+                  <span className="text-gray-300">{file.name}</span>
+                  <span className="text-gray-500">({formatFileSize(file.size)})</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeFile(index)}
+                    className="h-4 w-4 p-0 text-gray-400 hover:text-red-400"
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {/* Hidden File Input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          onChange={handleFileChange}
+          className="hidden"
+          accept="*/*"
+        />
+        
         <div className="flex items-end space-x-3">
           <div className="flex-1 relative">
             <Textarea
@@ -287,7 +363,9 @@ export const ChatInterface: React.FC = () => {
               <Button
                 variant="ghost"
                 size="sm"
+                onClick={handleFileUpload}
                 className="h-8 w-8 p-0 text-gray-400 hover:text-white"
+                title="Attach files"
               >
                 <Paperclip className="h-4 w-4" />
               </Button>
@@ -305,7 +383,7 @@ export const ChatInterface: React.FC = () => {
           </div>
           <Button
             onClick={handleSendMessage}
-            disabled={!input.trim() || isProcessing}
+            disabled={(!input.trim() && attachedFiles.length === 0) || isProcessing}
             className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700"
           >
             <Send className="h-4 w-4" />

@@ -26,6 +26,13 @@ export interface ChatMessage {
   timestamp: Date;
   projectId: string;
   metadata?: Record<string, any>;
+  attachments?: FileAttachment[];
+}
+
+export interface FileAttachment {
+  name: string;
+  size: number;
+  type: string;
 }
 
 export interface Feature {
