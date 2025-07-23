@@ -96,7 +96,7 @@ export class AIService {
 
   static async generateIntelligentResponse(message: string, fileContext: string, taskType: string): Promise<string> {
     try {
-      // Construct a comprehensive prompt based on the task type
+      // First try to use Blink AI
       const systemPrompt = `You are MacController, an advanced AI operator and assistant. You are part of a comprehensive AI suite capable of handling audio production, film editing, writing, design, business management, legal tasks, and more.
 
 Your role is to:
@@ -112,18 +112,23 @@ ${fileContext ? `File context: ${fileContext}` : ''}
 
 Respond as MacController with specific, actionable guidance. If files were attached, process them according to the user's request. Be direct, helpful, and professional.`
 
-      // Use Blink AI to generate intelligent response
-      const { text } = await blink.ai.generateText({
-        prompt: systemPrompt,
-        model: 'gpt-4o-mini',
-        maxTokens: 1000
-      })
+      // Use Blink AI to generate intelligent response with timeout
+      const response = await Promise.race([
+        blink.ai.generateText({
+          prompt: systemPrompt,
+          model: 'gpt-4o-mini',
+          maxTokens: 1000
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('AI service timeout')), 15000)
+        )
+      ]) as { text: string };
 
-      return text
+      return response.text
     } catch (error) {
       console.error('Error generating AI response:', error)
       
-      // Fallback to task-specific responses
+      // Always fallback to task-specific responses
       return this.getFallbackResponse(message, taskType, fileContext)
     }
   }

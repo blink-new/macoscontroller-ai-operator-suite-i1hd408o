@@ -44,6 +44,14 @@ export const ChatInterface: React.FC = () => {
     updateProgress
   } = useAppStore();
 
+  // Debug logging
+  console.log('ChatInterface render:', {
+    messagesCount: messages.length,
+    isProcessing,
+    hasCurrentProject: !!currentProject,
+    hasCurrentProfile: !!currentProfile
+  });
+
   const [input, setInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -94,11 +102,17 @@ export const ChatInterface: React.FC = () => {
       }))
     };
 
+    // Add user message immediately
     addMessage(userMessage);
-    const currentFiles = [...attachedFiles]; // Store files before clearing
+    
+    // Store files before clearing
+    const currentFiles = [...attachedFiles];
     setInput('');
     setAttachedFiles([]);
     setProcessing(true);
+
+    // Add a small delay to ensure UI updates
+    await new Promise(resolve => setTimeout(resolve, 100));
 
     try {
       // Update progress tracking
@@ -110,8 +124,13 @@ export const ChatInterface: React.FC = () => {
         remainingSteps: ['Generating response', 'Quality check', 'Finalizing output']
       });
 
-      // Use AI service to process the request
-      const aiResponse = await AIService.processUserRequest(originalInput, currentFiles);
+      // Use AI service to process the request with timeout
+      const aiResponse = await Promise.race([
+        AIService.processUserRequest(originalInput, currentFiles),
+        new Promise<string>((_, reject) => 
+          setTimeout(() => reject(new Error('Request timeout')), 30000)
+        )
+      ]);
       
       // Update progress to completion
       updateProgress({
@@ -134,10 +153,22 @@ export const ChatInterface: React.FC = () => {
     } catch (error) {
       console.error('Error processing AI request:', error);
       
-      // Fallback response
+      // Create a detailed fallback response
+      let fallbackContent = '';
+      
+      if (originalInput.toLowerCase().includes('summarize') && currentFiles.length > 0) {
+        fallbackContent = `I understand you want me to summarize the attached file(s). While I'm experiencing a temporary connection issue, I can see you've uploaded:\n\n`;
+        currentFiles.forEach(file => {
+          fallbackContent += `📎 ${file.name} (${formatFileSize(file.size)})\n`;
+        });
+        fallbackContent += `\nOnce the connection is restored, I'll be able to:\n• Extract and analyze the file content\n• Provide a comprehensive summary\n• Identify key points and insights\n• Answer specific questions about the content\n\nPlease try again in a moment, or let me know if you'd like me to help with something else.`;
+      } else {
+        fallbackContent = `I understand you want to work on "${originalInput}". While I'm experiencing a temporary connection issue, I'm designed to help with:\n\n• Audio production and music creation\n• Video editing and film production\n• Writing and content development\n• Design and graphics creation\n• Business management and strategy\n• Legal document preparation\n• File analysis and processing\n\nPlease try your request again in a moment, or let me know if you'd like me to help with a different task.`;
+      }
+      
       const errorMessage: ChatMessage = {
         id: `msg_${Date.now() + 1}`,
-        content: `I apologize, but I encountered an error processing your request. Please try again or contact support if the issue persists.\n\nError details: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        content: fallbackContent,
         role: 'assistant',
         timestamp: new Date(),
         projectId: currentProject.id

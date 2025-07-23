@@ -9,6 +9,7 @@ import { FeaturesDashboard } from './components/FeaturesDashboard';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AboutSection } from './components/AboutSection';
 import { FloatingActionButton } from './components/FloatingActionButton';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Toaster } from './components/ui/sonner';
 import './App.css';
 
@@ -39,7 +40,9 @@ function App() {
       <div className="relative z-10 flex h-screen">
         <Sidebar />
         <main className="flex-1 overflow-hidden">
-          {renderCurrentTab()}
+          <ErrorBoundary>
+            {renderCurrentTab()}
+          </ErrorBoundary>
         </main>
       </div>
 
